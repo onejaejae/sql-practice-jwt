@@ -1,0 +1,33 @@
+{
+  "name": "sql-practice",
+  "version": "1.0.0",
+  "description": "SQLite 실습을 위한 Node.js 프로젝트",
+  "main": "index.js",
+  "scripts": {
+    "start:todos": "node week5_todos.js",
+    "start:users": "node week5_users.js",
+    "dev:todos": "nodemon week5_todos.js",
+    "dev:users": "nodemon week5_users.js",
+    "dev:auth": "nodemon week5_auth_users.js",
+    "dev:auth-todos": "nodemon week5_auth_todos.js",
+    "test": "echo \"No test specified\" && exit 1"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.3",
+    "sqlite3": "^5.1.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  },
+  "keywords": [
+    "sqlite",
+    "nodejs",
+    "express",
+    "api",
+    "database"
+  ],
+  "author": "",
+  "license": "ISC"
+}
