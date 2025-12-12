@@ -10,11 +10,16 @@
     "dev:users": "nodemon week5_users.js",
     "dev:auth": "nodemon week5_auth_users.js",
     "dev:auth-todos": "nodemon week5_auth_todos.js",
+    "dev:complete-auth": "nodemon week7_complete_auth_system.js",
+    "dev:simple-auth": "nodemon week7_simple_auth.js",
     "test": "echo \"No test specified\" && exit 1"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
     "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.3",
     "sqlite3": "^5.1.6"
   },

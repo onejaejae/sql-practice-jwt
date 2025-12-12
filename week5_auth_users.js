@@ -110,7 +110,8 @@ app.post("/auth/register", async (req, res) => {
   try {
     // 비밀번호 해싱
     const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = bcrypt.hash(password, saltRounds);
+    console.log("hashedPassword----------", hashedPassword);
 
     db.run(
       "INSERT INTO users (name, email, password, age) VALUES (?, ?, ?, ?)",
