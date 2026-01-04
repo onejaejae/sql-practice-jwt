@@ -15,9 +15,9 @@ JWT 인증 시스템이 적용된 사용자 관리 API
 */
 
 const express = require("express");
-const sqlite3 = require("sqlite3").verbose();
 const bcrypt = require("bcryptjs");
 const path = require("path");
+const Database = require("./utils/database");
 const {
   generateToken,
   authenticateToken,
@@ -31,35 +31,28 @@ app.use(express.json());
 
 // 데이터베이스 연결
 const dbPath = path.join(__dirname, "auth_users.db");
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error("데이터베이스 연결 실패:", err.message);
-  } else {
-    console.log("auth_users.db 데이터베이스 연결 성공!");
-  }
-});
+const db = new Database(dbPath);
+console.log("auth_users.db 데이터베이스 연결 성공!");
 
 // 테이블 생성 (password 필드 추가)
-db.run(
-  `
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL,
-        age INTEGER,
-        createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-`,
-  (err) => {
-    if (err) {
-      console.error("테이블 생성 실패:", err.message);
-    } else {
-      console.log("users 테이블 준비 완료!");
-    }
+(async () => {
+  try {
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          email TEXT NOT NULL UNIQUE,
+          password TEXT NOT NULL,
+          age INTEGER,
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log("users 테이블 준비 완료!");
+  } catch (error) {
+    console.error("테이블 생성 실패:", error.message);
   }
-);
+})();
 
 // 이메일 유효성 검사 함수
 function isValidEmail(email) {
@@ -110,42 +103,37 @@ app.post("/auth/register", async (req, res) => {
   try {
     // 비밀번호 해싱
     const saltRounds = 10;
-    const hashedPassword = bcrypt.hash(password, saltRounds);
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
     console.log("hashedPassword----------", hashedPassword);
 
-    db.run(
+    const result = await db.run(
       "INSERT INTO users (name, email, password, age) VALUES (?, ?, ?, ?)",
-      [name, email, hashedPassword, age || null],
-      function (err) {
-        if (err) {
-          if (err.message.includes("UNIQUE constraint failed")) {
-            return res.status(409).json({
-              message: "이미 존재하는 이메일입니다",
-            });
-          }
-          return res.status(500).json({ error: err.message });
-        }
-
-        // JWT 토큰 생성
-        const token = generateToken({
-          id: this.lastID,
-          email,
-          name,
-        });
-
-        res.status(201).json({
-          message: "회원가입이 완료되었습니다",
-          user: {
-            id: this.lastID,
-            name,
-            email,
-            age: age || null,
-          },
-          token,
-        });
-      }
+      [name, email, hashedPassword, age || null]
     );
+
+    // JWT 토큰 생성
+    const token = generateToken({
+      id: result.lastID,
+      email,
+      name,
+    });
+
+    res.status(201).json({
+      message: "회원가입이 완료되었습니다",
+      user: {
+        id: result.lastID,
+        name,
+        email,
+        age: age || null,
+      },
+      token,
+    });
   } catch (error) {
+    if (error.message && error.message.includes("UNIQUE constraint failed")) {
+      return res.status(409).json({
+        message: "이미 존재하는 이메일입니다",
+      });
+    }
     res.status(500).json({
       message: "서버 오류가 발생했습니다",
       error: error.message,
@@ -154,7 +142,7 @@ app.post("/auth/register", async (req, res) => {
 });
 
 // POST /auth/login: 로그인
-app.post("/auth/login", (req, res) => {
+app.post("/auth/login", async (req, res) => {
   const { email, password } = req.body;
 
   // 필수 값 검증
@@ -164,11 +152,9 @@ app.post("/auth/login", (req, res) => {
     });
   }
 
-  // 사용자 조회
-  db.get("SELECT * FROM users WHERE email = ?", [email], async (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+  try {
+    // 사용자 조회
+    const user = await db.get("SELECT * FROM users WHERE email = ?", [email]);
 
     if (!user) {
       return res.status(401).json({
@@ -176,40 +162,38 @@ app.post("/auth/login", (req, res) => {
       });
     }
 
-    try {
-      // 비밀번호 검증
-      const isValidPassword = await bcrypt.compare(password, user.password);
+    // 비밀번호 검증
+    const isValidPassword = await bcrypt.compare(password, user.password);
 
-      if (!isValidPassword) {
-        return res.status(401).json({
-          message: "비밀번호가 틀렸습니다",
-        });
-      }
-
-      // JWT 토큰 생성
-      const token = generateToken({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      });
-
-      res.json({
-        message: "로그인 성공",
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          age: user.age,
-        },
-        token,
-      });
-    } catch (error) {
-      res.status(500).json({
-        message: "로그인 처리 중 오류가 발생했습니다",
-        error: error.message,
+    if (!isValidPassword) {
+      return res.status(401).json({
+        message: "비밀번호가 틀렸습니다",
       });
     }
-  });
+
+    // JWT 토큰 생성
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+    });
+
+    res.json({
+      message: "로그인 성공",
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        age: user.age,
+      },
+      token,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "로그인 처리 중 오류가 발생했습니다",
+      error: error.message,
+    });
+  }
 });
 
 // ================================
@@ -217,39 +201,37 @@ app.post("/auth/login", (req, res) => {
 // ================================
 
 // GET /users: 모든 사용자 조회 (인증 필요)
-app.get("/users", authenticateToken, (req, res) => {
-  db.all(
-    "SELECT id, name, email, age, password, createdAt FROM users ORDER BY id",
-    [],
-    (err, rows) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({
-        users: rows,
-        requestedBy: req.user,
-      });
-    }
-  );
+app.get("/users", authenticateToken, async (req, res) => {
+  try {
+    const rows = await db.all(
+      "SELECT id, name, email, age, password, createdAt FROM users ORDER BY id",
+      []
+    );
+    res.json({
+      users: rows,
+      requestedBy: req.user,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // GET /users/me: 내 정보 조회 (인증 필요)
-app.get("/users/me", authenticateToken, (req, res) => {
+app.get("/users/me", authenticateToken, async (req, res) => {
   const userId = req.user.id;
 
-  db.get(
-    "SELECT id, name, email, age, createdAt FROM users WHERE id = ?",
-    [userId],
-    (err, user) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      if (!user) {
-        return res.status(404).json({ message: "사용자를 찾을 수 없습니다" });
-      }
-      res.json(user);
+  try {
+    const user = await db.get(
+      "SELECT id, name, email, age, createdAt FROM users WHERE id = ?",
+      [userId]
+    );
+    if (!user) {
+      return res.status(404).json({ message: "사용자를 찾을 수 없습니다" });
     }
-  );
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // PATCH /users/me: 내 정보 수정 (인증 필요)
@@ -435,13 +417,12 @@ app.listen(PORT, () => {
 });
 
 // 프로세스 종료 시 데이터베이스 연결 정리
-process.on("SIGINT", () => {
-  db.close((err) => {
-    if (err) {
-      console.error("데이터베이스 연결 종료 실패:", err.message);
-    } else {
-      console.log("데이터베이스 연결이 정상적으로 종료되었습니다.");
-    }
+process.on("SIGINT", async () => {
+  try {
+    await db.safeClose();
     process.exit(0);
-  });
+  } catch (error) {
+    console.error("데이터베이스 연결 종료 실패:", error.message);
+    process.exit(1);
+  }
 });
