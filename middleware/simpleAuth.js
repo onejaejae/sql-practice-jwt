@@ -53,6 +53,9 @@ const authenticateToken = (req, res, next) => {
     req.user = decoded; // 토큰에서 사용자 정보 추출
     next();
   } catch (error) {
+    console.log("error----", error);
+    console.log("error name----", error.name);
+
     if (error.name === "TokenExpiredError") {
       return res.status(401).json({
         message: "토큰이 만료되었습니다. refresh token으로 갱신하세요",
@@ -72,6 +75,7 @@ const requireAdmin = (req, res, next) => {
     });
   }
 
+  console.log("req.user----------", req.user);
   if (req.user.role !== "ADMIN") {
     return res.status(403).json({
       message: "관리자 권한이 필요합니다",

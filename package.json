@@ -12,6 +12,10 @@
     "dev:auth-todos": "nodemon week5_auth_todos.js",
     "dev:complete-auth": "nodemon week7_complete_auth_system.js",
     "dev:simple-auth": "nodemon week7_simple_auth.js",
+    "serve:client": "cd client && python3 -m http.server 8080",
+    "dev:sequelize": "nodemon week8_sequelize_crud.js",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
     "test": "echo \"No test specified\" && exit 1"
   },
   "dependencies": {
@@ -21,6 +25,8 @@
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.16.0",
+    "sequelize": "^6.37.7",
     "sqlite3": "^5.1.6"
   },
   "devDependencies": {

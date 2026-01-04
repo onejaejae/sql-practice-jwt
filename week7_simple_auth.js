@@ -22,9 +22,10 @@ API 목록:
 */
 
 const express = require("express");
-const sqlite3 = require("sqlite3").verbose();
+const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const path = require("path");
+const Database = require("./utils/database");
 
 // 심플한 인증 미들웨어 import
 const {
@@ -38,23 +39,19 @@ const {
 const app = express();
 const PORT = 3006;
 
+app.use(cors());
 app.use(express.json());
 
 // 데이터베이스 연결
 const dbPath = path.join(__dirname, "simple_auth.db");
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error("데이터베이스 연결 실패:", err.message);
-  } else {
-    console.log("simple_auth.db 데이터베이스 연결 성공!");
-  }
-});
+const db = new Database(dbPath);
+console.log("simple_auth.db 데이터베이스 연결 성공!");
 
-// 테이블 생성
-db.serialize(() => {
-  // 사용자 테이블 (심플 버전)
-  db.run(
-    `
+// 테이블 생성 및 초기 설정
+(async () => {
+  try {
+    // 사용자 테이블 (심플 버전)
+    await db.run(`
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -63,19 +60,11 @@ db.serialize(() => {
             role TEXT NOT NULL DEFAULT 'USER',
             createdAt TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    `,
-    (err) => {
-      if (err) {
-        console.error("users 테이블 생성 실패:", err.message);
-      } else {
-        console.log("users 테이블 준비 완료!");
-      }
-    }
-  );
+    `);
+    console.log("users 테이블 준비 완료!");
 
-  // Refresh Token 저장 테이블
-  db.run(
-    `
+    // Refresh Token 저장 테이블
+    await db.run(`
         CREATE TABLE IF NOT EXISTS refresh_tokens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -84,19 +73,11 @@ db.serialize(() => {
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
-    `,
-    (err) => {
-      if (err) {
-        console.error("refresh_tokens 테이블 생성 실패:", err.message);
-      } else {
-        console.log("refresh_tokens 테이블 준비 완료!");
-      }
-    }
-  );
+    `);
+    console.log("refresh_tokens 테이블 준비 완료!");
 
-  // Todo 테이블
-  db.run(
-    `
+    // Todo 테이블
+    await db.run(`
         CREATE TABLE IF NOT EXISTS todos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -105,45 +86,28 @@ db.serialize(() => {
             createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
-    `,
-    (err) => {
-      if (err) {
-        console.error("todos 테이블 생성 실패:", err.message);
-      } else {
-        console.log("todos 테이블 준비 완료!");
-      }
-    }
-  );
+    `);
+    console.log("todos 테이블 준비 완료!");
 
-  // 기본 관리자 계정 생성
-  db.get(
-    "SELECT * FROM users WHERE email = ?",
-    ["admin@test.com"],
-    async (err, admin) => {
-      if (err) {
-        console.error("관리자 계정 확인 실패:", err.message);
-        return;
-      }
+    // 기본 관리자 계정 생성
+    const admin = await db.get("SELECT * FROM users WHERE email = ?", [
+      "admin@test.com",
+    ]);
 
-      if (!admin) {
-        const hashedPassword = await bcrypt.hash("admin123", 10);
-        db.run(
-          "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
-          ["관리자", "admin@test.com", hashedPassword, "ADMIN"],
-          function (err) {
-            if (err) {
-              console.error("관리자 계정 생성 실패:", err.message);
-            } else {
-              console.log("✅ 기본 관리자 계정 생성:");
-              console.log("   이메일: admin@test.com");
-              console.log("   비밀번호: admin123");
-            }
-          }
-        );
-      }
+    if (!admin) {
+      const hashedPassword = await bcrypt.hash("admin123", 10);
+      await db.run(
+        "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
+        ["관리자", "admin@test.com", hashedPassword, "ADMIN"]
+      );
+      console.log("✅ 기본 관리자 계정 생성:");
+      console.log("   이메일: admin@test.com");
+      console.log("   비밀번호: admin123");
     }
-  );
-});
+  } catch (error) {
+    console.error("데이터베이스 초기화 실패:", error.message);
+  }
+})();
 
 // 유틸리티 함수
 function isValidEmail(email) {
@@ -151,38 +115,28 @@ function isValidEmail(email) {
 }
 
 // Refresh Token 저장
-function saveRefreshToken(userId, refreshToken) {
+async function saveRefreshToken(userId, refreshToken) {
   const expiresAt = new Date(
     Date.now() + 7 * 24 * 60 * 60 * 1000
   ).toISOString();
 
-  return new Promise((resolve, reject) => {
-    db.run(
-      "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
-      [userId, refreshToken, expiresAt],
-      function (err) {
-        if (err) reject(err);
-        else resolve(this.lastID);
-      }
-    );
-  });
+  const result = await db.run(
+    "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+    [userId, refreshToken, expiresAt]
+  );
+
+  return result.lastID;
 }
 
 // Refresh Token 검증
-function validateRefreshToken(refreshToken) {
-  return new Promise((resolve, reject) => {
-    db.get(
-      `SELECT rt.*, u.id as user_id, u.name, u.email, u.role 
-             FROM refresh_tokens rt 
-             JOIN users u ON rt.user_id = u.id 
-             WHERE rt.token = ? AND datetime(rt.expires_at) > datetime('now')`,
-      [refreshToken],
-      (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      }
-    );
-  });
+async function validateRefreshToken(refreshToken) {
+  return await db.get(
+    `SELECT rt.*, u.id as user_id, u.name, u.email, u.role 
+           FROM refresh_tokens rt 
+           JOIN users u ON rt.user_id = u.id 
+           WHERE rt.token = ? AND datetime(rt.expires_at) > datetime('now')`,
+    [refreshToken]
+  );
 }
 
 // ================================
@@ -214,62 +168,50 @@ app.post("/auth/register", async (req, res) => {
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    db.run(
+    const result = await db.run(
       "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
-      [name, email, hashedPassword, "USER"], // 일반 사용자로 가입
-      async function (err) {
-        if (err) {
-          if (err.message.includes("UNIQUE constraint failed")) {
-            return res.status(409).json({
-              message: "이미 존재하는 이메일입니다",
-            });
-          }
-          return res.status(500).json({
-            message: "회원가입 중 오류가 발생했습니다",
-          });
-        }
-
-        // 토큰 생성
-        const payload = {
-          id: this.lastID,
-          email,
-          name,
-          role: "USER",
-        };
-
-        const { accessToken, refreshToken } = generateTokenPair(payload);
-
-        // Refresh Token 저장
-        try {
-          await saveRefreshToken(this.lastID, refreshToken);
-
-          res.status(201).json({
-            message: "회원가입이 완료되었습니다",
-            user: {
-              id: this.lastID,
-              name,
-              email,
-              role: "USER",
-            },
-            accessToken,
-            refreshToken,
-          });
-        } catch (tokenError) {
-          return res.status(500).json({
-            message: "토큰 생성 중 오류가 발생했습니다",
-          });
-        }
-      }
+      [name, email, hashedPassword, "USER"] // 일반 사용자로 가입
     );
+
+    // 토큰 생성
+    const payload = {
+      id: result.lastID,
+      email,
+      name,
+      role: "USER",
+    };
+
+    const { accessToken, refreshToken } = generateTokenPair(payload);
+
+    // Refresh Token 저장
+    await saveRefreshToken(result.lastID, refreshToken);
+
+    res.status(201).json({
+      message: "회원가입이 완료되었습니다",
+      user: {
+        id: result.lastID,
+        name,
+        email,
+        role: "USER",
+      },
+      accessToken,
+      refreshToken,
+    });
   } catch (error) {
+    if (error.message && error.message.includes("UNIQUE constraint failed")) {
+      return res.status(409).json({
+        message: "이미 존재하는 이메일입니다",
+      });
+    }
     res.status(500).json({
       message: "서버 오류가 발생했습니다",
+      error: error.message,
     });
   }
 });
 
 // POST /auth/login - 로그인
-app.post("/auth/login", (req, res) => {
+app.post("/auth/login", async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -278,12 +220,8 @@ app.post("/auth/login", (req, res) => {
     });
   }
 
-  db.get("SELECT * FROM users WHERE email = ?", [email], async (err, user) => {
-    if (err) {
-      return res.status(500).json({
-        message: "로그인 처리 중 오류가 발생했습니다",
-      });
-    }
+  try {
+    const user = await db.get("SELECT * FROM users WHERE email = ?", [email]);
 
     if (!user) {
       return res.status(401).json({
@@ -291,50 +229,43 @@ app.post("/auth/login", (req, res) => {
       });
     }
 
-    try {
-      const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.password);
 
-      if (!isValidPassword) {
-        return res.status(401).json({
-          message: "비밀번호가 틀렸습니다",
-        });
-      }
-
-      const payload = {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      };
-
-      const { accessToken, refreshToken } = generateTokenPair(payload);
-
-      // Refresh Token 저장
-      saveRefreshToken(user.id, refreshToken)
-        .then(() => {
-          res.json({
-            message: "로그인 성공",
-            user: {
-              id: user.id,
-              name: user.name,
-              email: user.email,
-              role: user.role,
-            },
-            accessToken,
-            refreshToken,
-          });
-        })
-        .catch(() => {
-          return res.status(500).json({
-            message: "토큰 생성 중 오류가 발생했습니다",
-          });
-        });
-    } catch (error) {
-      res.status(500).json({
-        message: "로그인 처리 중 오류가 발생했습니다",
+    if (!isValidPassword) {
+      return res.status(401).json({
+        message: "비밀번호가 틀렸습니다",
       });
     }
-  });
+
+    const payload = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+    };
+
+    const { accessToken, refreshToken } = generateTokenPair(payload);
+
+    // Refresh Token 저장
+    await saveRefreshToken(user.id, refreshToken);
+
+    res.json({
+      message: "로그인 성공",
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      accessToken,
+      refreshToken,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "로그인 처리 중 오류가 발생했습니다",
+      error: error.message,
+    });
+  }
 });
 
 // POST /auth/refresh - 토큰 재발급
@@ -372,7 +303,7 @@ app.post("/auth/refresh", async (req, res) => {
       generateTokenPair(payload);
 
     // 기존 토큰 삭제하고 새 토큰 저장
-    db.run("DELETE FROM refresh_tokens WHERE token = ?", [refreshToken]);
+    await db.run("DELETE FROM refresh_tokens WHERE token = ?", [refreshToken]);
     await saveRefreshToken(tokenData.user_id, newRefreshToken);
 
     res.json({
@@ -398,48 +329,48 @@ app.post("/auth/refresh", async (req, res) => {
 // ================================
 
 // GET /users/me - 내 정보 조회
-app.get("/users/me", authenticateToken, (req, res) => {
+app.get("/users/me", authenticateToken, async (req, res) => {
   const userId = req.user.id;
 
-  db.get(
-    "SELECT id, name, email, role, createdAt FROM users WHERE id = ?",
-    [userId],
-    (err, user) => {
-      if (err) {
-        return res.status(500).json({
-          message: "사용자 정보 조회 중 오류가 발생했습니다",
-        });
-      }
+  try {
+    const user = await db.get(
+      "SELECT id, name, email, role, createdAt FROM users WHERE id = ?",
+      [userId]
+    );
 
-      if (!user) {
-        return res.status(404).json({
-          message: "사용자를 찾을 수 없습니다",
-        });
-      }
-
-      res.json(user);
+    if (!user) {
+      return res.status(404).json({
+        message: "사용자를 찾을 수 없습니다",
+      });
     }
-  );
+
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({
+      message: "사용자 정보 조회 중 오류가 발생했습니다",
+      error: error.message,
+    });
+  }
 });
 
 // GET /admin/users - 모든 사용자 조회 (관리자 전용)
-app.get("/admin/users", authenticateToken, requireAdmin, (req, res) => {
-  db.all(
-    "SELECT id, name, email, role, createdAt FROM users ORDER BY createdAt DESC",
-    [],
-    (err, users) => {
-      if (err) {
-        return res.status(500).json({
-          message: "사용자 목록 조회 중 오류가 발생했습니다",
-        });
-      }
+app.get("/admin/users", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const users = await db.all(
+      "SELECT id, name, email, role, createdAt FROM users ORDER BY createdAt DESC",
+      []
+    );
 
-      res.json({
-        users,
-        requestedBy: req.user,
-      });
-    }
-  );
+    res.json({
+      users,
+      requestedBy: req.user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "사용자 목록 조회 중 오류가 발생했습니다",
+      error: error.message,
+    });
+  }
 });
 
 // ================================
@@ -447,7 +378,7 @@ app.get("/admin/users", authenticateToken, requireAdmin, (req, res) => {
 // ================================
 
 // GET /todos - 할 일 목록 조회
-app.get("/todos", authenticateToken, (req, res) => {
+app.get("/todos", authenticateToken, async (req, res) => {
   const userId = req.user.id;
   const isAdmin = req.user.role === "ADMIN";
 
@@ -468,23 +399,24 @@ app.get("/todos", authenticateToken, (req, res) => {
     params = [userId];
   }
 
-  db.all(query, params, (err, todos) => {
-    if (err) {
-      return res.status(500).json({
-        message: "할 일 목록 조회 중 오류가 발생했습니다",
-      });
-    }
+  try {
+    const todos = await db.all(query, params);
 
     res.json({
       todos,
       isAdmin,
       user: req.user,
     });
-  });
+  } catch (error) {
+    res.status(500).json({
+      message: "할 일 목록 조회 중 오류가 발생했습니다",
+      error: error.message,
+    });
+  }
 });
 
 // POST /todos - 새 할 일 추가
-app.post("/todos", authenticateToken, (req, res) => {
+app.post("/todos", authenticateToken, async (req, res) => {
   const { task } = req.body;
   const userId = req.user.id;
 
@@ -494,47 +426,39 @@ app.post("/todos", authenticateToken, (req, res) => {
     });
   }
 
-  db.run(
-    "INSERT INTO todos (user_id, task) VALUES (?, ?)",
-    [userId, task],
-    function (err) {
-      if (err) {
-        return res.status(500).json({
-          message: "할 일 생성 중 오류가 발생했습니다",
-        });
-      }
+  try {
+    const result = await db.run(
+      "INSERT INTO todos (user_id, task) VALUES (?, ?)",
+      [userId, task]
+    );
 
-      // 생성된 할 일 조회
-      db.get("SELECT * FROM todos WHERE id = ?", [this.lastID], (err, todo) => {
-        if (err) {
-          return res.status(500).json({
-            message: "생성된 할 일 조회 중 오류가 발생했습니다",
-          });
-        }
+    // 생성된 할 일 조회
+    const todo = await db.get("SELECT * FROM todos WHERE id = ?", [
+      result.lastID,
+    ]);
 
-        res.status(201).json({
-          message: "할 일이 추가되었습니다",
-          todo,
-        });
-      });
-    }
-  );
+    res.status(201).json({
+      message: "할 일이 추가되었습니다",
+      todo,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "할 일 생성 중 오류가 발생했습니다",
+      error: error.message,
+    });
+  }
 });
 
 // PATCH /todos/:id - 할 일 수정 (소유권 검증)
-app.patch("/todos/:id", authenticateToken, (req, res) => {
+app.patch("/todos/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { task, completed } = req.body;
   const userId = req.user.id;
   const isAdmin = req.user.role === "ADMIN";
 
-  // 먼저 할 일 조회
-  db.get("SELECT * FROM todos WHERE id = ?", [id], (err, todo) => {
-    if (err) {
-      return res.status(500).json({
-        message: "할 일 조회 중 오류가 발생했습니다",
-      });
-    }
+  try {
+    // 먼저 할 일 조회
+    const todo = await db.get("SELECT * FROM todos WHERE id = ?", [id]);
 
     if (!todo) {
       return res.status(404).json({
@@ -572,43 +496,32 @@ app.patch("/todos/:id", authenticateToken, (req, res) => {
     values.push(id);
     const sql = `UPDATE todos SET ${updates.join(", ")} WHERE id = ?`;
 
-    db.run(sql, values, function (err) {
-      if (err) {
-        return res.status(500).json({
-          message: "할 일 수정 중 오류가 발생했습니다",
-        });
-      }
+    await db.run(sql, values);
 
-      // 수정된 할 일 조회
-      db.get("SELECT * FROM todos WHERE id = ?", [id], (err, updatedTodo) => {
-        if (err) {
-          return res.status(500).json({
-            message: "수정된 할 일 조회 중 오류가 발생했습니다",
-          });
-        }
+    // 수정된 할 일 조회
+    const updatedTodo = await db.get("SELECT * FROM todos WHERE id = ?", [id]);
 
-        res.json({
-          message: "할 일이 수정되었습니다",
-          todo: updatedTodo,
-        });
-      });
+    res.json({
+      message: "할 일이 수정되었습니다",
+      todo: updatedTodo,
     });
-  });
+  } catch (error) {
+    res.status(500).json({
+      message: "할 일 수정 중 오류가 발생했습니다",
+      error: error.message,
+    });
+  }
 });
 
 // DELETE /todos/:id - 할 일 삭제 (소유권 검증)
-app.delete("/todos/:id", authenticateToken, (req, res) => {
+app.delete("/todos/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
   const isAdmin = req.user.role === "ADMIN";
 
-  // 먼저 할 일 조회
-  db.get("SELECT * FROM todos WHERE id = ?", [id], (err, todo) => {
-    if (err) {
-      return res.status(500).json({
-        message: "할 일 조회 중 오류가 발생했습니다",
-      });
-    }
+  try {
+    // 먼저 할 일 조회
+    const todo = await db.get("SELECT * FROM todos WHERE id = ?", [id]);
 
     if (!todo) {
       return res.status(404).json({
@@ -623,18 +536,17 @@ app.delete("/todos/:id", authenticateToken, (req, res) => {
       });
     }
 
-    db.run("DELETE FROM todos WHERE id = ?", [id], function (err) {
-      if (err) {
-        return res.status(500).json({
-          message: "할 일 삭제 중 오류가 발생했습니다",
-        });
-      }
+    await db.run("DELETE FROM todos WHERE id = ?", [id]);
 
-      res.json({
-        message: "할 일이 삭제되었습니다",
-      });
+    res.json({
+      message: "할 일이 삭제되었습니다",
     });
-  });
+  } catch (error) {
+    res.status(500).json({
+      message: "할 일 삭제 중 오류가 발생했습니다",
+      error: error.message,
+    });
+  }
 });
 
 // ================================
@@ -677,13 +589,12 @@ app.listen(PORT, () => {
 });
 
 // 프로세스 종료 시 정리
-process.on("SIGINT", () => {
-  db.close((err) => {
-    if (err) {
-      console.error("데이터베이스 연결 종료 실패:", err.message);
-    } else {
-      console.log("데이터베이스 연결이 정상적으로 종료되었습니다.");
-    }
+process.on("SIGINT", async () => {
+  try {
+    await db.safeClose();
     process.exit(0);
-  });
+  } catch (error) {
+    console.error("데이터베이스 연결 종료 실패:", error.message);
+    process.exit(1);
+  }
 });

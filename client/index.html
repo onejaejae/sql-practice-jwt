@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Auth System - Client</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 800px;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .auth-section, .main-section {
+            display: none;
+        }
+
+        .auth-section.active, .main-section.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        input[type="text"], input[type="email"], input[type="password"], textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+
+        .user-info {
+            background: #f3f4f6;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .todo-item {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: between;
+            align-items: center;
+        }
+
+        .todo-completed {
+            background: #ecfdf5;
+            border-color: #10b981;
+        }
+
+        .todo-content {
+            flex: 1;
+        }
+
+        .todo-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .todo-actions .btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            margin: 0;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e5e7eb;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            color: #6b7280;
+            transition: color 0.3s;
+        }
+
+        .tab.active {
+            color: #4f46e5;
+            border-bottom: 2px solid #4f46e5;
+            margin-bottom: -2px;
+        }
+
+        .admin-badge {
+            background: #dc2626;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .user-badge {
+            background: #059669;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                width: 95%;
+                margin: 10px;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Simple Auth System</h1>
+            <p>JWT 기반 인증 및 Todo 관리 시스템</p>
+        </div>
+        
+        <div class="content">
+            <!-- 로그인/회원가입 섹션 -->
+            <div class="auth-section active" id="authSection">
+                <div class="tabs">
+                    <button class="tab active" onclick="showLoginForm()">로그인</button>
+                    <button class="tab" onclick="showRegisterForm()">회원가입</button>
+                </div>
+                
+                <!-- 로그인 폼 -->
+                <div id="loginForm">
+                    <form onsubmit="login(event)">
+                        <div class="form-group">
+                            <label for="loginEmail">이메일</label>
+                            <input type="email" id="loginEmail" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="loginPassword">비밀번호</label>
+                            <input type="password" id="loginPassword" required>
+                        </div>
+                        <button type="submit" class="btn">로그인</button>
+                    </form>
+                    
+                    <div style="margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 8px;">
+                        <p><strong>테스트 계정:</strong></p>
+                        <p>관리자: admin@test.com / admin123</p>
+                        <button type="button" class="btn btn-secondary" onclick="fillAdminCredentials()">관리자로 로그인</button>
+                    </div>
+                </div>
+                
+                <!-- 회원가입 폼 -->
+                <div id="registerForm" style="display: none;">
+                    <form onsubmit="register(event)">
+                        <div class="form-group">
+                            <label for="registerName">이름</label>
+                            <input type="text" id="registerName" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="registerEmail">이메일</label>
+                            <input type="email" id="registerEmail" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="registerPassword">비밀번호 (최소 6자)</label>
+                            <input type="password" id="registerPassword" required minlength="6">
+                        </div>
+                        <button type="submit" class="btn">회원가입</button>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- 메인 섹션 -->
+            <div class="main-section" id="mainSection">
+                <div class="user-info" id="userInfo"></div>
+                
+                <div class="tabs">
+                    <button class="tab active" onclick="showTodoTab()">할 일 관리</button>
+                    <button class="tab" id="adminTab" onclick="showAdminTab()" style="display: none;">사용자 관리</button>
+                </div>
+                
+                <!-- Todo 관리 탭 -->
+                <div id="todoTab">
+                    <div class="form-group">
+                        <label for="newTask">새 할 일</label>
+                        <input type="text" id="newTask" placeholder="할 일을 입력하세요">
+                        <button type="button" class="btn" onclick="createTodo()" style="margin-top: 10px;">추가</button>
+                    </div>
+                    
+                    <div id="todoList"></div>
+                </div>
+                
+                <!-- 관리자 탭 -->
+                <div id="adminTabContent" style="display: none;">
+                    <div id="usersList"></div>
+                </div>
+                
+                <div style="margin-top: 30px; text-align: center;">
+                    <button type="button" class="btn btn-secondary" onclick="logout()">로그아웃</button>
+                </div>
+            </div>
+            
+            <!-- 알림 영역 -->
+            <div id="alertArea"></div>
+        </div>
+    </div>
+    
+    <script src="client.js"></script>
+</body>
+</html>
