@@ -14,6 +14,7 @@
     "dev:simple-auth": "nodemon week7_simple_auth.js",
     "serve:client": "cd client && python3 -m http.server 8080",
     "dev:sequelize": "nodemon week8_sequelize_crud.js",
+    "dev:sequelize-auth": "nodemon week8_sequelize_auth.js",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "test": "echo \"No test specified\" && exit 1"
