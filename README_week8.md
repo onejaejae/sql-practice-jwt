@@ -3,16 +3,19 @@
 ## 실행 방법
 
 ### 1. MySQL 데이터베이스 시작
+
 ```bash
 npm run docker:up
 ```
 
 ### 2. Sequelize CRUD 서버 실행
+
 ```bash
 npm run dev:sequelize
 ```
 
 ### 3. 데이터베이스 종료
+
 ```bash
 npm run docker:down
 ```
@@ -20,6 +23,7 @@ npm run docker:down
 ## API 테스트 예시
 
 ### 사용자 생성
+
 ```bash
 curl -X POST http://localhost:3000/users \
   -H "Content-Type: application/json" \
@@ -27,6 +31,7 @@ curl -X POST http://localhost:3000/users \
 ```
 
 ### 할일 생성 (사용자 ID 필요)
+
 ```bash
 curl -X POST http://localhost:3000/todos \
   -H "Content-Type: application/json" \
@@ -34,11 +39,13 @@ curl -X POST http://localhost:3000/todos \
 ```
 
 ### 사용자와 할일 조회 (JOIN 관계)
+
 ```bash
 curl http://localhost:3000/users/1
 ```
 
 ### 할일 완료 처리
+
 ```bash
 curl -X PUT http://localhost:3000/todos/1 \
   -H "Content-Type: application/json" \
@@ -56,7 +63,7 @@ curl -X PUT http://localhost:3000/todos/1 \
 
 - **Model**: 데이터베이스 테이블과 매핑되는 클래스
 - **Association**: `hasMany()`, `belongsTo()`로 테이블 간 관계 정의
-- **Query Methods**: 
+- **Query Methods**:
   - `User.findAll()` → `SELECT * FROM users`
   - `User.create()` → `INSERT INTO users`
   - `User.update()` → `UPDATE users SET ...`
@@ -72,3 +79,4 @@ curl -X PUT http://localhost:3000/todos/1 \
 │   ├── User.js         # User 모델
 │   └── Todo.js         # Todo 모델
 └── week8_sequelize_crud.js  # Express 서버
+```
